@@ -1,0 +1,203 @@
+@startuml reset-db-sequence
+title VelPharma Database Reset Flow (./reset-db.sh)
+
+actor Developer
+participant "reset-db.sh" as Script
+participant "Docker Compose" as Compose
+participant "Docker" as Docker
+participant "PostgreSQL\nContainer" as Postgres
+database "Init Scripts\n(Auto-executed)" as Init
+database "04-load-data.sh" as Loader
+database "Backup File" as Backup
+
+Developer -> Script: ./reset-db.sh
+
+== Phase 1: Teardown ==
+Script -> Compose: docker compose down -v
+note right
+  Stops containers and
+  **removes volumes**
+  (destroys all data!)
+end note
+Compose -> Docker: Stop velpharma-db
+Compose -> Docker: Stop velpharma-pgadmin
+Compose -> Docker: Remove volume: postgres_data
+Compose -> Docker: Remove volume: pgadmin_data
+Compose -> Docker: Remove network
+Docker --> Script: ✅ Cleanup complete
+
+== Phase 2: Rebuild ==
+Script -> Compose: docker compose build --no-cache postgres
+note right
+  Rebuilds image from scratch
+  Includes init scripts
+end note
+Compose -> Docker: Build postgres image
+Docker -> Docker: FROM postgres:17-alpine
+Docker -> Docker: RUN apk add gzip curl
+Docker -> Docker: COPY ./init/*.sql /docker-entrypoint-initdb.d/
+note right
+  Init folder contents:
+  - 01-create-user.sql
+  - 02-create-schema.sql
+  - 03-create-extensions.sql
+  - 04-load-data.sh ⭐
+  - *.sql.disabled (ignored)
+end note
+Docker --> Compose: ✅ Image built
+Compose --> Script: ✅ Build complete
+
+== Phase 3: Start Services ==
+Script -> Compose: docker compose up -d
+Compose -> Docker: Create network
+Compose -> Docker: Create volumes
+Compose -> Docker: Start postgres container
+Docker --> Postgres: Container starting...
+
+== Phase 4: Database Initialization (Automatic) ==
+note over Postgres, Init
+  PostgreSQL entrypoint automatically
+  runs scripts in /docker-entrypoint-initdb.d/
+  in alphabetical order
+end note
+
+Postgres -> Init: Execute init scripts
+Init -> Postgres: 01-create-user.sql
+note right: Create postgres user & vpv4 schema
+Init -> Postgres: 02-create-schema.sql
+note right
+  Create all tables:
+  - PRODUCTS
+  - ADVERSE_DRUG_REACTIONS
+  - MANUFACTURERS
+  - ATC_CODES
+  - etc. (20+ tables)
+end note
+Init -> Postgres: 03-create-extensions.sql
+note right
+  Install PostgreSQL extensions:
+  - uuid-ossp
+  - pgcrypto
+  - pg_trgm
+  - unaccent
+  - hstore
+  - pg_stat_statements
+  - btree_gin, btree_gist
+end note
+
+== Phase 5: Data Loading (04-load-data.sh) ==
+Init -> Loader: Execute 04-load-data.sh
+activate Loader
+
+Loader -> Loader: Check for backups/production_backup_data_only.sql
+note right
+  **Priority 1: Data-only backup**
+  This is the Git-tracked file
+  Contains production data
+end note
+
+alt Backup exists (DEFAULT)
+    Loader -> Backup: File found! ✅
+    note over Backup
+      backups/production_backup_data_only.sql
+      - Size: 11.1MB
+      - Lines: 138,297
+      - Contains ONLY data (no schema)
+    end note
+
+    Loader -> Postgres: SET session_replication_role = replica
+    note right
+      Bypass triggers to handle
+      circular foreign keys
+      (atc_codes, organs)
+    end note
+
+    Loader -> Postgres: \\i /backups/production_backup_data_only.sql
+    note right
+      COPY statements execute:
+      - COPY 6808 (ATC_CODES)
+      - COPY 73 (ACTIVE_SUBSTANCES)
+      - COPY 29222 (ADVERSE_DRUG_REACTIONS)
+      - COPY 2281 (PRODUCTS)
+      - COPY 306 (MANUFACTURERS)
+      - COPY 42 (ORGANS)
+      - ... and more tables
+    end note
+
+    Postgres --> Loader: Data loaded (10-30 seconds)
+
+    Loader -> Postgres: SET session_replication_role = DEFAULT
+
+    Loader -> Postgres: Query data counts
+    Postgres --> Loader: Products: 2281\nADRs: 29222\nManufacturers: 306
+
+    Loader --> Init: ✅ Data-only backup loaded successfully
+    note right
+      Output:
+      📦 Loading production data...
+      ✅ Data-only backup loaded successfully in Xs
+      📈 Data Summary:
+          Products: 2281
+          ADRs: 29222
+          Manufacturers: 306
+      🎉 Database ready with production data!
+    end note
+
+else Backup missing (Fallback)
+    Loader -> Backup: File not found! ⚠️
+    Loader -> Loader: Check for full backup
+    note right: backups/production_backup.sql
+
+    alt Full backup exists
+        Loader -> Postgres: Load with schema conflicts ignored
+        note right: Uses session_replication_role = replica
+    else Seed file exists
+        Loader -> Postgres: Load _05-seed-base.sql.disabled
+        note right: Manual fallback option
+    else No data sources
+        Loader --> Init: ℹ️ Starting with empty schema
+        note right
+          Instructions printed for:
+          1. Create backup
+          2. Run master data loader
+          3. Manual seed
+        end note
+    end
+end
+
+deactivate Loader
+
+Init -> Postgres: Skip *.sql.disabled files
+note right
+  Docker entrypoint ignores:
+  - _05-seed-atc-code.sql.disabled
+  - _05-seed-base.sql.disabled
+  - _06-seed-deponering.sql.disabled
+end note
+
+Init --> Postgres: ✅ Initialization complete
+
+== Phase 6: Health Check ==
+Postgres -> Postgres: Accept connections
+Postgres -> Postgres: Health check: pg_isready
+Postgres --> Docker: ✅ Container healthy
+
+Docker --> Compose: Container ready
+Compose -> Docker: Start pgadmin container
+Compose --> Script: ✅ Services started
+
+== Phase 7: Wait & Complete ==
+Script -> Script: sleep 5
+note right: Wait for database to be ready
+Script --> Developer: ✅ Database reset complete!
+
+note over Developer
+  Total time: 30-60 seconds
+
+  Output shows:
+  - Database URL
+  - PgAdmin URL
+  - Commands to check status
+end note
+
+@enduml

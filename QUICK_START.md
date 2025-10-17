@@ -135,6 +135,8 @@ When you run `./reset-db.sh`, here's what happens:
 
 **Time**: 30-60 seconds total
 
+**Visual Flow**: See detailed sequence diagram at [docs/reset-db-sequence.puml](docs/reset-db-sequence.puml)
+
 ---
 
 ## 💡 Key Principles

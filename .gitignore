@@ -51,6 +51,9 @@ data/*.json
 postgres_data/
 pgadmin_data/
 
+# Documentation (track all .md, .puml, etc)
+# No ignores - keep all documentation files
+
 # IDE
 .vscode/
 .idea/

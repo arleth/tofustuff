@@ -275,6 +275,8 @@ git pull                 # Get latest backup from team
 
 **Time**: 30-60 seconds total
 
+**Visual Flow**: See detailed sequence diagram at [docs/reset-db-sequence.puml](../docs/reset-db-sequence.puml)
+
 **Warning**: ⚠️ This deletes ALL local database changes! Make sure you've backed up any local work first.
 
 ---
