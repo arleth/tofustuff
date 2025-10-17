@@ -25,12 +25,27 @@ terraform.rc
 docker-compose.override.yml
 
 # Database backups
+# Ignore all backup files
 backups/*.sql
 backups/*.dump
 backups/*.gz
 
-# Keep backups directory but not contents
+# EXCEPT: Track the production backup (distributed via Git)
+!backups/production_backup_data_only.sql
+
+# Keep backups directory structure
 !backups/.gitkeep
+!backups/README.md
+
+# Note: If backup grows >50MB, consider Git LFS:
+# git lfs track "backups/production_backup_data_only.sql"
+
+# Data files (CSV, etc)
+data/*.csv
+data/*.tsv
+data/*.xlsx
+data/*.json
+!data/README.md
 
 # PostgreSQL data
 postgres_data/

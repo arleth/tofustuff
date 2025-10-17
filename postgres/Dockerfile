@@ -13,5 +13,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 # Labels for metadata
 LABEL maintainer="VelPharma Team"
-LABEL version="1.0.1"
-LABEL description="VelPharma Drug Database - Schema Only"
+LABEL version="2.0.0"
+LABEL description="VelPharma Drug Database - Optimized for Performance"

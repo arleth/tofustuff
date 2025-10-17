@@ -139,6 +139,12 @@ resource "local_file" "readme" {
     **Deprescribing:** DEPRESCRIBING_GUIDELINES, DEPRESCRIBING_CONDITIONS
     **Staging:** IMPORT_STAGING_PRODUCTS_SUBSTANCES
 
+    ### Data Loading Strategy
+
+    **Automatic (Default)**: Database loads from `backups/production_backup.sql` on init
+    **Fallback**: Seed file `_05-seed-base.sql` if no backup exists
+    **Manual**: See `DATABASE_WORKFLOW.md` for complete data management guide
+
     ### Useful Commands
     ```bash
     # Start/stop services
@@ -162,9 +168,16 @@ resource "local_file" "readme" {
     ```
 
     ### Troubleshooting
+    - **No data after reset?** Ensure `backups/production_backup.sql` exists
     - **Init scripts not running?** Use `./reset-db.sh` to force re-initialization
     - **Port conflict?** Check with `lsof -i :${var.db_port}`
     - **PgAdmin can't connect?** Use host `postgres` (not `localhost`) and port `5432` (not `${var.db_port}`)
+
+    ### Important Files
+    - `DATABASE_WORKFLOW.md` - Complete data management guide
+    - `./reset-db.sh` - Reset database (loads backup)
+    - `./create-backup.sh` - Create new backup
+    - `./monitor-db.sh` - Monitor performance
 
     ## Configuration
     Edit `variables.tf` and run `tofu apply` to regenerate `.env` and this README.
